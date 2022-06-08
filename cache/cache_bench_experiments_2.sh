@@ -5,7 +5,7 @@
 make -j$N_PROC cache_bench
 
 capacity() {
-    echo $(($CACHE_SIZE/$BLOCK_SIZE))
+    echo $(($cache_size/$block_size))
 }
 
 log() {
@@ -25,9 +25,9 @@ n_shards_opt() {
 }
 
 CACHE_SIZE=(8388608 1073741824 34359738368) # 8MB, 1GB, 32GB
+BLOCK_SIZE=(8192 2147483648) # 8kB, 2MB
 N_THREADS=16
 OPS_PER_THREAD=10000000
-BLOCK_SIZE=(8192 2147483648) # 8kB, 2MB
 
 for cache_size in ${CACHE_SIZE[@]}
 do
@@ -37,10 +37,14 @@ do
         for n_shards in ${N_SHARDS[@]}
         do
             num_shard_bits=$(printf %.0f $(log $n_shards))
-            # Vary the access pattern
             cap=$(capacity)
-            small_support_ratio=$((($cap * 10) / $n_shards))
-            RESIDENT_RATIO=($cap $small_support_ratio 1 0.01) # singleton, small support, medium support, large support
+
+            # Non-skewed access patterns
+            singleton=$cap
+            small_support=$((($cap * 10) / $n_shards))
+            medium_support=1
+            large_support=0.01
+            RESIDENT_RATIO=($singleton $small_support $medium_support $large_support)
             for resident_ratio in ${RESIDENT_RATIO[@]}
             do
                 #-skewed=true means it is not skewed
@@ -50,7 +54,7 @@ do
                     -value_bytes=$block_size -resident_ratio=$resident_ratio -threads=$N_THREADS
             done
 
-            # Skewed access
+            # Skewed access pattern
             RESIDENT_RATIO=0.1
             SKEW=512
             ./cache_bench -num_shard_bits=$num_shard_bits -skew=$SKEW \

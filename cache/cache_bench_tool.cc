@@ -257,8 +257,7 @@ class CacheBench {
 
  public:
   CacheBench()
-      : max_key_(static_cast<uint64_t>(FLAGS_cache_size / FLAGS_resident_ratio /
-                                       FLAGS_value_bytes)),
+      : max_key_(static_cast<uint64_t>((FLAGS_cache_size / FLAGS_value_bytes) / FLAGS_resident_ratio)),
         lookup_insert_threshold_(kHundredthUint64 *
                                  FLAGS_lookup_insert_percent),
         insert_threshold_(lookup_insert_threshold_ +
