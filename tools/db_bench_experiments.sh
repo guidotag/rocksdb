@@ -31,7 +31,7 @@ KEY_SIZE=20
 VALUE_SIZE=400
 REPORT_FILE_DIR=bm.lc.nt32.cm1.d0/hash.def
 BENCHMARKS=(fillrandom readrandom readwhilewriting)
-USE_EXISTING_DB=(1 0 0)
+USE_EXISTING_DB=(0 1 1)
 SEED=1652227743
 
 for cache_size in ${CACHE_SIZE[@]}
@@ -53,7 +53,7 @@ do
             do
                 for i in ${!BENCHMARKS[@]}
                 do
-                    numactl --interleave=all ./db_bench --benchmarks=fillrandom --use_existing_db=${USE_EXISTING_DB[i]} \
+                    numactl --interleave=all ./db_bench --benchmarks=${BENCHMARKS[i]} --use_existing_db=${USE_EXISTING_DB[i]} \
                         --level0_file_num_compaction_trigger=4 --level0_slowdown_writes_trigger=20 --level0_stop_writes_trigger=30 \
                         --num=$num_elems --key_size=$KEY_SIZE --value_size=$VALUE_SIZE --value_size_distribution_type=fixed \ # key-value parameters
                         --block_size=$block_size --cache_size=$cache_size --cache_numshardbits=$num_shard_bits \ # cache parameters
