@@ -2,65 +2,94 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 # REQUIRE: cache_bench binary exists in the current directory
 
-make -j$N_PROC cache_bench
+DEBUG_LEVEL=0 make -j24 cache_bench
 
 capacity() {
-    echo $(($cache_size/$block_size))
+    echo $(($CACHE_SIZE/$BLOCK_SIZE))
 }
 
 log() {
     echo $(echo "l($1)/l(2)" | bc -l)
 }
 
-n_shards_small() {
-    cap=$(capacity)
-    l=$(log $cap)
-    printf %.0f $(echo "$cap/$l" | bc -l)
+num_shards_small() {
+    CAP=$(capacity)
+    LOG=$(log $CAP)
+    printf %.0f $(echo "$CAP/$LOG" | bc -l)
 }
 
-n_shards_opt() {
-    cap=$(capacity)
-    l=$(log $cap)
-    printf %.0f $(echo "$cap/($l * $l)" | bc -l)
+num_shards_opt() {
+    CAP=$(capacity)
+    LOG=$(log $cap)
+    printf %.0f $(echo "$CAP/($LOG * $LOG)" | bc -l)
 }
 
-CACHE_SIZE=(8388608 1073741824 34359738368) # 8MB, 1GB, 32GB
-BLOCK_SIZE=(8192 2147483648) # 8kB, 2MB
-N_THREADS=16
+CACHE_SIZE_LIST=(1073741824 8589934592 34359738368) # 1GB, 8GB, 32GB
+BLOCK_SIZE_LIST=(8192 2097152) # 8kB, 2MB
+NUM_THREADS=16
 OPS_PER_THREAD=10000000
+CACHE_TYPE_LIST=(fast_lru_cache lru_cache)
 
-for cache_size in ${CACHE_SIZE[@]}
+for CACHE_TYPE in ${CACHE_TYPE_LIST[@]}
 do
-    for block_size in ${BLOCK_SIZE[@]}
+    for CACHE_SIZE in ${CACHE_SIZE_LIST[@]}
     do
-        N_SHARDS=(64 $(n_shards_small) $(n_shards_opt))
-        for n_shards in ${N_SHARDS[@]}
+        for BLOCK_SIZE in ${BLOCK_SIZE_LIST[@]}
         do
-            num_shard_bits=$(printf %.0f $(log $n_shards))
-            cap=$(capacity)
-
-            # Non-skewed access patterns
-            singleton=$cap
-            small_support=$((($cap * 10) / $n_shards))
-            medium_support=1
-            large_support=0.01
-            RESIDENT_RATIO=($singleton $small_support $medium_support $large_support)
-            for resident_ratio in ${RESIDENT_RATIO[@]}
+            #NUM_SHARDS_LIST=(64 $(num_shards_small) $(num_shards_opt))
+            NUM_SHARDS_LIST=(64)
+            for NUM_SHARDS in ${NUM_SHARDS_LIST[@]}
             do
-                #-skewed=true means it is not skewed
-                ./cache_bench -num_shard_bits=$num_shard_bits -skewed=true \
-                    -lookup_insert_percent=100 -lookup_percent=0 -insert_percent=0 -erase_percent=0 \
-                    -populate_cache=true -cache_size=$cache_size -ops_per_thread=$OPS_PER_THREAD \
-                    -value_bytes=$block_size -resident_ratio=$resident_ratio -threads=$N_THREADS
-            done
+                NUM_SHARDS_BITS=$(printf %.0f $(log $NUM_SHARDS))
+                CAP=$(capacity)
 
-            # Skewed access pattern
-            RESIDENT_RATIO=0.1
-            SKEW=512
-            ./cache_bench -num_shard_bits=$num_shard_bits -skew=$SKEW \
-                    -lookup_insert_percent=100 -lookup_percent=0 -insert_percent=0 -erase_percent=0 \
-                    -populate_cache=true -cache_size=$cache_size -ops_per_thread=$OPS_PER_THREAD \
-                    -value_bytes=$value_bytes -resident_ratio=$RESIDENT_RATIO -threads=$N_THREADS
+                # Non-skewed access patterns
+                SINGLETON=$CAP
+                SMALL_SUPPORT=$((($CAP * 10) / $NUM_SHARDS))
+                MEDIUM_SUPPORT=1
+                LARGE_SUPPORT=0.01
+                RESIDENT_RATIO_LIST=($LARGE_SUPPORT $SINGLETON $SMALL_SUPPORT $MEDIUM_SUPPORT)
+
+                for RESIDENT_RATIO in ${RESIDENT_RATIO_LIST[@]}
+                do
+                    echo -e "====================================================="
+                    echo -e "====================================================="
+                    echo -e "\t-cache_type=$CACHE_TYPE"
+                    echo -e "\t-cache_size=$CACHE_SIZE"
+                    echo -e "\t-value_bytes=$BLOCK_SIZE"
+                    echo -e "\t-num_shard_bits=$NUM_SHARDS_BITS"
+                    echo -e "\t-resident_ratio=$RESIDENT_RATIO"
+                    echo -e "\t-threads=$NUM_THREADS"
+                    echo -e "\t-ops_per_thread=$OPS_PER_THREAD"
+                    echo -e "\t-lookup_insert_percent=100"
+                    echo -e "\t-populate_cache=true"
+                    echo -e "\t-skewed=true (not skewed)"
+                    ./cache_bench -cache_type=$CACHE_TYPE -num_shard_bits=$NUM_SHARDS_BITS -skewed=true \
+                        -lookup_insert_percent=100 -lookup_percent=0 -insert_percent=0 -erase_percent=0 \
+                        -populate_cache=true -cache_size=$CACHE_SIZE -ops_per_thread=$OPS_PER_THREAD \
+                        -value_bytes=$BLOCK_SIZE -resident_ratio=$RESIDENT_RATIO -threads=$NUM_THREADS
+                done
+
+                # Skewed access pattern
+                RESIDENT_RATIO=0.1
+                SKEW=512
+                echo -e "====================================================="
+                echo -e "====================================================="
+                echo -e "\t-cache_type=$CACHE_TYPE"
+                echo -e "\t-cache_size=$CACHE_SIZE"
+                echo -e "\t-value_bytes=$BLOCK_SIZE"
+                echo -e "\t-num_shard_bits=$NUM_SHARDS_BITS"
+                echo -e "\t-resident_ratio=$RESIDENT_RATIO"
+                echo -e "\t-threads=$NUM_THREADS"
+                echo -e "\t-ops_per_thread=$OPS_PER_THREAD"
+                echo -e "\t-lookup_insert_percent=100"
+                echo -e "\t-populate_cache=true"
+                echo -e "\t-skew=$SKEW"
+                ./cache_bench -cache_type=$CACHE_TYPE -num_shard_bits=$NUM_SHARDS_BITS -skew=$SKEW \
+                        -lookup_insert_percent=100 -lookup_percent=0 -insert_percent=0 -erase_percent=0 \
+                        -populate_cache=true -cache_size=$CACHE_SIZE -ops_per_thread=$OPS_PER_THREAD \
+                        -value_bytes=$BLOCK_SIZE -resident_ratio=$RESIDENT_RATIO -threads=$NUM_THREADS
+            done
         done
     done
 done
