@@ -521,7 +521,6 @@ class CacheBench {
     StopWatchNano timer(clock);
 
     for (uint64_t i = 0; i < FLAGS_ops_per_thread; i++) {
-      timer.Start();
       Slice key = gen.GetRand(thread->rnd, max_key_, max_log_);
       uint64_t random_op = thread->rnd.Next();
       Cache::CreateCallback create_cb = [](const void* buf, size_t size,
@@ -533,6 +532,7 @@ class CacheBench {
         return Status::OK();
       };
 
+      timer.Start();
       if (random_op < lookup_insert_threshold_) {
         if (handle) {
           cache_->Release(handle);
@@ -541,11 +541,7 @@ class CacheBench {
         // do lookup
         handle = cache_->Lookup(key, &helper2, create_cb, Cache::Priority::LOW,
                                 true);
-        if (handle) {
-          // do something with the data
-          result += NPHash64(static_cast<char*>(cache_->Value(handle)),
-                             FLAGS_value_bytes);
-        } else {
+        if (!handle) {
           // do insert
           Status s = cache_->Insert(key, createValue(thread->rnd), &helper2,
                                     FLAGS_value_bytes, &handle);
@@ -568,11 +564,6 @@ class CacheBench {
         // do lookup
         handle = cache_->Lookup(key, &helper2, create_cb, Cache::Priority::LOW,
                                 true);
-        if (handle) {
-          // do something with the data
-          result += NPHash64(static_cast<char*>(cache_->Value(handle)),
-                             FLAGS_value_bytes);
-        }
       } else if (random_op < erase_threshold_) {
         // do erase
         cache_->Erase(key);
