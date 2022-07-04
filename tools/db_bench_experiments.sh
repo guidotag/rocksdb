@@ -44,7 +44,7 @@ do
                     numactl --interleave=all ./db_bench --benchmarks=${BENCHMARKS[i]} --use_existing_db=${USE_EXISTING_DB[i]} \
                         --level0_file_num_compaction_trigger=4 --level0_slowdown_writes_trigger=20 --level0_stop_writes_trigger=30 \
                         --num=$NUM_ELEMS --key_size=$KEY_SIZE --value_size=$VALUE_SIZE --value_size_distribution_type=fixed \ # key-value parameters
-                        --block_size=$block_size --cache_size=$CACHE_SIZE --cache_numshardbits=$NUM_SHARD_BITS \ # cache parameters
+                        --block_size=$BLOCK_SIZE --cache_size=$CACHE_SIZE --cache_numshardbits=$NUM_SHARD_BITS \ # cache parameters
                         --max_write_buffer_number=4 --write_buffer_size=16777216 --target_file_size_base=16777216 --max_bytes_for_level_base=67108864 --max_bytes_for_level_multiplier=8 \ #LSM structural parameters
                         --compression_type=none --disable_wal=1 \ # no compression, no log
                         --cache_index_and_filter_blocks=1 --pin_l0_filter_and_index_blocks_in_cache=1 --partition_index_and_filters=1 --cache_high_pri_pool_ratio=0.5 \ # index/filter caching
