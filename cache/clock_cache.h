@@ -73,7 +73,7 @@ struct ClockHandle {
     IS_ELEMENT = (1 << kIsElementOffset),
     // Clock priorities. Represents how close a handle is from
     // being evictable.
-    CLOCK_PRIORITY = (3 << kClockPriorityOffset),
+    CLOCK_PRIORITY = (3 << kClockPriorityOffset)
   };
   uint8_t flags;
 
@@ -218,8 +218,9 @@ struct ClockHandle {
     return !this->IsElement() && this->displacements > 0;
   }
 
-  inline bool Matches(const Slice& some_key) {
-    return this->IsElement() && this->key() == some_key;
+  inline bool Matches(const Slice& some_key, uint32_t some_hash) {
+    return this->IsElement() && this->hash == some_hash &&
+           this->key() == some_key;
   }
 };  // struct ClockHandle
 
@@ -230,7 +231,7 @@ class ClockHandleTable {
 
   // Returns a pointer to a visible element matching the key/hash, or
   // nullptr if not present.
-  ClockHandle* Lookup(const Slice& key);
+  ClockHandle* Lookup(const Slice& key, uint32_t hash);
 
   // Inserts a copy of h into the hash table.
   // Returns a pointer to the inserted handle, or nullptr if no slot
@@ -273,12 +274,13 @@ class ClockHandleTable {
  private:
   friend class ClockCacheShard;
 
-  int FindVisibleElement(const Slice& key, int& probe, int displacement);
+  int FindVisibleElement(const Slice& key, uint32_t hash, int& probe,
+                         int displacement);
 
   int FindAvailableSlot(const Slice& key, int& probe, int displacement);
 
-  int FindVisibleElementOrAvailableSlot(const Slice& key, int& probe,
-                                        int displacement);
+  int FindVisibleElementOrAvailableSlot(const Slice& key, uint32_t hash,
+                                        int& probe, int displacement);
 
   // Returns the index of the first slot probed (hashing with
   // the given key) with a handle e such that cond(e) is true.
@@ -344,12 +346,14 @@ class ALIGN_AS(CACHE_LINE_SIZE) ClockCacheShard final : public CacheShard {
                         Statistics* /*stats*/) override {
     return Lookup(key, hash);
   }
+
   Cache::Handle* Lookup(const Slice& key, uint32_t hash) override;
 
   bool Release(Cache::Handle* handle, bool /*useful*/,
                bool erase_if_last_ref) override {
     return Release(handle, erase_if_last_ref);
   }
+
   bool IsReady(Cache::Handle* /*handle*/) override { return true; }
   void Wait(Cache::Handle* /*handle*/) override {}
 
@@ -372,7 +376,7 @@ class ALIGN_AS(CACHE_LINE_SIZE) ClockCacheShard final : public CacheShard {
  private:
   friend class ClockCache;
   void ClockRemove(ClockHandle* e);
-  void ClockInsert(ClockHandle* e);
+  void ClockInsert(ClockHandle* e, ClockHandle::ClockPriority priority);
 
   // Free some space following strict clock policy until enough space
   // to hold (usage_ + charge) is freed or the clock list is empty

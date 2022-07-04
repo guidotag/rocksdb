@@ -40,16 +40,16 @@ ClockHandleTable::~ClockHandleTable() {
   ApplyToEntriesRange([](ClockHandle* h) { h->FreeData(); }, 0, GetTableSize());
 }
 
-ClockHandle* ClockHandleTable::Lookup(const Slice& key) {
+ClockHandle* ClockHandleTable::Lookup(const Slice& key, uint32_t hash) {
   int probe = 0;
-  int slot = FindVisibleElement(key, probe, 0);
+  int slot = FindVisibleElement(key, hash, probe, 0);
   return (slot == -1) ? nullptr : &array_[slot];
 }
 
 ClockHandle* ClockHandleTable::Insert(ClockHandle* h, ClockHandle** old) {
   int probe = 0;
-  int slot =
-      FindVisibleElementOrAvailableSlot(h->key(), probe, 1 /*displacement*/);
+  int slot = FindVisibleElementOrAvailableSlot(h->key(), h->hash, probe,
+                                               1 /*displacement*/);
   *old = nullptr;
   if (slot == -1) {
     return nullptr;
@@ -65,7 +65,7 @@ ClockHandle* ClockHandleTable::Insert(ClockHandle* h, ClockHandle** old) {
     }
     // It used to be a tombstone, so there may already be a copy of the
     // key in the table.
-    slot = FindVisibleElement(h->key(), probe, 0 /*displacement*/);
+    slot = FindVisibleElement(h->key(), h->hash, probe, 0 /*displacement*/);
     if (slot == -1) {
       // No existing copy of the key.
       return new_entry;
@@ -81,7 +81,7 @@ ClockHandle* ClockHandleTable::Insert(ClockHandle* h, ClockHandle** old) {
     if (slot == -1) {
       // No available slots. Roll back displacements.
       probe = 0;
-      slot = FindVisibleElement(h->key(), probe, -1);
+      slot = FindVisibleElement(h->key(), h->hash, probe, -1);
       array_[slot].displacements--;
       FindAvailableSlot(h->key(), probe, -1);
       return nullptr;
@@ -115,10 +115,11 @@ void ClockHandleTable::Assign(int slot, ClockHandle* h) {
 
 void ClockHandleTable::Exclude(ClockHandle* h) { h->SetIsVisible(false); }
 
-int ClockHandleTable::FindVisibleElement(const Slice& key, int& probe,
-                                         int displacement) {
+int ClockHandleTable::FindVisibleElement(const Slice& key, uint32_t hash,
+                                         int& probe, int displacement) {
   return FindSlot(
-      key, [&](ClockHandle* h) { return h->Matches(key) && h->IsVisible(); },
+      key,
+      [&](ClockHandle* h) { return h->Matches(key, hash) && h->IsVisible(); },
       probe, displacement);
 }
 
@@ -130,13 +131,14 @@ int ClockHandleTable::FindAvailableSlot(const Slice& key, int& probe,
 }
 
 int ClockHandleTable::FindVisibleElementOrAvailableSlot(const Slice& key,
+                                                        uint32_t hash,
                                                         int& probe,
                                                         int displacement) {
   return FindSlot(
       key,
       [&](ClockHandle* h) {
         return h->IsEmpty() || h->IsTombstone() ||
-               (h->Matches(key) && h->IsVisible());
+               (h->Matches(key, hash) && h->IsVisible());
       },
       probe, displacement);
 }
@@ -248,9 +250,10 @@ void ClockCacheShard::ClockRemove(ClockHandle* h) {
   clock_usage_ -= h->total_charge;
 }
 
-void ClockCacheShard::ClockInsert(ClockHandle* h) {
+void ClockCacheShard::ClockInsert(ClockHandle* h,
+                                  ClockHandle::ClockPriority priority) {
   assert(!h->IsInClockList());
-  h->SetPriority(ClockHandle::ClockPriority::HIGH);
+  h->SetPriority(priority);
   clock_usage_ += h->total_charge;
 }
 
@@ -319,7 +322,7 @@ void ClockCacheShard::SetStrictCapacityLimit(bool strict_capacity_limit) {
 Status ClockCacheShard::Insert(const Slice& key, uint32_t hash, void* value,
                                size_t charge, Cache::DeleterFn deleter,
                                Cache::Handle** handle,
-                               Cache::Priority /*priority*/) {
+                               Cache::Priority priority) {
   if (key.size() != kCacheKeySize) {
     return Status::NotSupported("ClockCache only supports key size " +
                                 std::to_string(kCacheKeySize) + "B");
@@ -382,7 +385,11 @@ Status ClockCacheShard::Insert(const Slice& key, uint32_t hash, void* value,
         }
       }
       if (handle == nullptr) {
-        ClockInsert(h);
+        if (priority == Cache::Priority::HIGH) {
+          ClockInsert(h, ClockHandle::ClockPriority::HIGH);
+        } else {
+          ClockInsert(h, ClockHandle::ClockPriority::MEDIUM);
+        }
       } else {
         // If caller already holds a ref, no need to take one here.
         if (!h->HasRefs()) {
@@ -401,11 +408,11 @@ Status ClockCacheShard::Insert(const Slice& key, uint32_t hash, void* value,
   return s;
 }
 
-Cache::Handle* ClockCacheShard::Lookup(const Slice& key, uint32_t /* hash */) {
+Cache::Handle* ClockCacheShard::Lookup(const Slice& key, uint32_t hash) {
   ClockHandle* h = nullptr;
   {
     DMutexLock l(mutex_);
-    h = table_.Lookup(key);
+    h = table_.Lookup(key, hash);
     if (h != nullptr) {
       assert(h->IsVisible());
       if (!h->HasRefs()) {
@@ -448,7 +455,7 @@ bool ClockCacheShard::Release(Cache::Handle* handle, bool erase_if_last_ref) {
         table_.Remove(h);
       } else {
         // Put the item back on the clock list, and don't free it.
-        ClockInsert(h);
+        ClockInsert(h, ClockHandle::ClockPriority::HIGH);
         last_reference = false;
       }
     }
@@ -467,12 +474,12 @@ bool ClockCacheShard::Release(Cache::Handle* handle, bool erase_if_last_ref) {
   return last_reference;
 }
 
-void ClockCacheShard::Erase(const Slice& key, uint32_t /* hash */) {
+void ClockCacheShard::Erase(const Slice& key, uint32_t hash) {
   ClockHandle copy;
   bool last_reference = false;
   {
     DMutexLock l(mutex_);
-    ClockHandle* h = table_.Lookup(key);
+    ClockHandle* h = table_.Lookup(key, hash);
     if (h != nullptr) {
       table_.Exclude(h);
       if (!h->HasRefs()) {
