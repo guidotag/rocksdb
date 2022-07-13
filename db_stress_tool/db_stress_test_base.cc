@@ -10,6 +10,7 @@
 
 #include "util/compression.h"
 #ifdef GFLAGS
+#include "cache/clock_cache.h"
 #include "cache/fast_lru_cache.h"
 #include "db_stress_tool/db_stress_common.h"
 #include "db_stress_tool/db_stress_compaction_filter.h"
@@ -114,7 +115,7 @@ std::shared_ptr<Cache> StressTest::NewCache(size_t capacity,
   }
 
   if (FLAGS_cache_type == "clock_cache") {
-    auto cache = NewClockCache(static_cast<size_t>(capacity), FLAGS_block_size,
+    auto cache = ExperimentalNewClockCache(static_cast<size_t>(capacity), FLAGS_block_size,
                                num_shard_bits, false /*strict_capacity_limit*/,
                                kDefaultCacheMetadataChargePolicy);
     if (!cache) {
