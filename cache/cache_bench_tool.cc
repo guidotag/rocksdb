@@ -539,10 +539,6 @@ class CacheBench {
       };
 
       timer.Start();
-<<<<<<< HEAD
-=======
-
->>>>>>> upstream/main
       if (random_op < lookup_insert_threshold_) {
         if (handle) {
           cache_->Release(handle);
@@ -551,9 +547,6 @@ class CacheBench {
         // do lookup
         handle = cache_->Lookup(key, &helper2, create_cb, Cache::Priority::LOW,
                                 true);
-<<<<<<< HEAD
-        if (!handle) {
-=======
         if (handle) {
           if (!FLAGS_lean) {
             // do something with the data
@@ -561,7 +554,6 @@ class CacheBench {
                                FLAGS_value_bytes);
           }
         } else {
->>>>>>> upstream/main
           // do insert
           Status s = cache_->Insert(key, createValue(thread->rnd), &helper2,
                                     FLAGS_value_bytes, &handle);
@@ -584,8 +576,6 @@ class CacheBench {
         // do lookup
         handle = cache_->Lookup(key, &helper2, create_cb, Cache::Priority::LOW,
                                 true);
-<<<<<<< HEAD
-=======
         if (handle) {
           if (!FLAGS_lean) {
             // do something with the data
@@ -593,7 +583,6 @@ class CacheBench {
                                FLAGS_value_bytes);
           }
         }
->>>>>>> upstream/main
       } else if (random_op < erase_threshold_) {
         // do erase
         cache_->Erase(key);
