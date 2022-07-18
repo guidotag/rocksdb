@@ -272,6 +272,7 @@ DECLARE_bool(use_blob_cache);
 DECLARE_bool(use_shared_block_and_blob_cache);
 DECLARE_uint64(blob_cache_size);
 DECLARE_int32(blob_cache_numshardbits);
+DECLARE_int32(prepopulate_blob_cache);
 
 DECLARE_int32(approximate_size_one_in);
 DECLARE_bool(sync_fault_injection);
@@ -593,7 +594,7 @@ extern void PoolSizeChangeThread(void* v);
 
 extern void DbVerificationThread(void* v);
 
-extern void SnapshotGcThread(void* v);
+extern void TimestampedSnapshotsThread(void* v);
 
 extern void PrintKeyValue(int cf, uint64_t key, const char* value, size_t sz);
 
@@ -613,8 +614,7 @@ extern void CheckAndSetOptionsForMultiOpsTxnStressTest();
 extern void InitializeHotKeyGenerator(double alpha);
 extern int64_t GetOneHotKeyID(double rand_seed, int64_t max_key);
 
-extern std::string GenerateTimestampForRead();
-extern std::string NowNanosStr();
+extern std::string GetNowNanos();
 
 std::shared_ptr<FileChecksumGenFactory> GetFileChecksumImpl(
     const std::string& name);

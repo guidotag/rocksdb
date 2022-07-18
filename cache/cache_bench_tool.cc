@@ -13,6 +13,7 @@
 #include <set>
 #include <sstream>
 
+#include "cache/clock_cache.h"
 #include "cache/fast_lru_cache.h"
 #include "db/db_impl/db_impl.h"
 #include "monitoring/histogram.h"
@@ -73,6 +74,11 @@ DEFINE_uint32(
 DEFINE_uint32(gather_stats_entries_per_lock, 256,
               "For Cache::ApplyToAllEntries");
 DEFINE_bool(skewed, false, "If true, skew the key access distribution");
+
+DEFINE_bool(lean, false,
+            "If true, no additional computation is performed besides cache "
+            "operations.");
+
 #ifndef ROCKSDB_LITE
 DEFINE_string(secondary_cache_uri, "",
               "Full URI for creating a custom secondary cache object");
@@ -284,7 +290,7 @@ class CacheBench {
     }
 
     if (FLAGS_cache_type == "clock_cache") {
-      cache_ = NewClockCache(
+      cache_ = ExperimentalNewClockCache(
           FLAGS_cache_size, FLAGS_value_bytes, FLAGS_num_shard_bits,
           false /*strict_capacity_limit*/, kDefaultCacheMetadataChargePolicy);
       if (!cache_) {
@@ -533,6 +539,10 @@ class CacheBench {
       };
 
       timer.Start();
+<<<<<<< HEAD
+=======
+
+>>>>>>> upstream/main
       if (random_op < lookup_insert_threshold_) {
         if (handle) {
           cache_->Release(handle);
@@ -541,7 +551,17 @@ class CacheBench {
         // do lookup
         handle = cache_->Lookup(key, &helper2, create_cb, Cache::Priority::LOW,
                                 true);
+<<<<<<< HEAD
         if (!handle) {
+=======
+        if (handle) {
+          if (!FLAGS_lean) {
+            // do something with the data
+            result += NPHash64(static_cast<char*>(cache_->Value(handle)),
+                               FLAGS_value_bytes);
+          }
+        } else {
+>>>>>>> upstream/main
           // do insert
           Status s = cache_->Insert(key, createValue(thread->rnd), &helper2,
                                     FLAGS_value_bytes, &handle);
@@ -564,6 +584,16 @@ class CacheBench {
         // do lookup
         handle = cache_->Lookup(key, &helper2, create_cb, Cache::Priority::LOW,
                                 true);
+<<<<<<< HEAD
+=======
+        if (handle) {
+          if (!FLAGS_lean) {
+            // do something with the data
+            result += NPHash64(static_cast<char*>(cache_->Value(handle)),
+                               FLAGS_value_bytes);
+          }
+        }
+>>>>>>> upstream/main
       } else if (random_op < erase_threshold_) {
         // do erase
         cache_->Erase(key);

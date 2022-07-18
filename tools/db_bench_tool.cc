@@ -37,6 +37,7 @@
 #include <thread>
 #include <unordered_map>
 
+#include "cache/clock_cache.h"
 #include "cache/fast_lru_cache.h"
 #include "db/db_impl/db_impl.h"
 #include "db/malloc_stats.h"
@@ -104,6 +105,7 @@
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
 using GFLAGS_NAMESPACE::RegisterFlagValidator;
 using GFLAGS_NAMESPACE::SetUsageMessage;
+using GFLAGS_NAMESPACE::SetVersionString;
 
 #ifdef ROCKSDB_LITE
 #define IF_ROCKSDB_LITE(Then, Else) Then
@@ -1094,6 +1096,10 @@ DEFINE_int32(blob_cache_numshardbits, 6,
              "the block and blob caches are different "
              "(use_shared_block_and_blob_cache = false).");
 
+DEFINE_int32(prepopulate_blob_cache, 0,
+             "[Integrated BlobDB] Pre-populate hot/warm blobs in blob cache. 0 "
+             "to disable and 1 to insert during flush.");
+
 #ifndef ROCKSDB_LITE
 
 // Secondary DB instance Options
@@ -1676,6 +1682,12 @@ static const bool FLAGS_table_cache_numshardbits_dummy __attribute__((__unused__
 DEFINE_uint32(write_batch_protection_bytes_per_key, 0,
               "Size of per-key-value checksum in each write batch. Currently "
               "only value 0 and 8 are supported.");
+
+DEFINE_bool(build_info, false,
+            "Print the build info via GetRocksBuildInfoAsString");
+
+DEFINE_bool(track_and_verify_wals_in_manifest, false,
+            "If true, enable WAL tracking in the MANIFEST");
 
 namespace ROCKSDB_NAMESPACE {
 namespace {
@@ -2843,8 +2855,8 @@ class Benchmark {
 #endif
 
   void PrintEnvironment() {
-    fprintf(stderr, "RocksDB:    version %d.%d\n",
-            kMajorVersion, kMinorVersion);
+    fprintf(stderr, "RocksDB:    version %s\n",
+            GetRocksVersionAsString(true).c_str());
 
 #if defined(__linux) || defined(__APPLE__) || defined(__FreeBSD__)
     time_t now = time(nullptr);
@@ -2970,10 +2982,10 @@ class Benchmark {
       return nullptr;
     }
     if (FLAGS_cache_type == "clock_cache") {
-      auto cache = NewClockCache(static_cast<size_t>(capacity),
-                                 FLAGS_block_size, FLAGS_cache_numshardbits,
-                                 false /*strict_capacity_limit*/,
-                                 kDefaultCacheMetadataChargePolicy);
+      auto cache = ExperimentalNewClockCache(
+          static_cast<size_t>(capacity), FLAGS_block_size,
+          FLAGS_cache_numshardbits, false /*strict_capacity_limit*/,
+          kDefaultCacheMetadataChargePolicy);
       if (!cache) {
         fprintf(stderr, "Clock cache not supported.");
         exit(1);
@@ -4481,6 +4493,8 @@ class Benchmark {
     }
 
     options.allow_data_in_errors = FLAGS_allow_data_in_errors;
+    options.track_and_verify_wals_in_manifest =
+        FLAGS_track_and_verify_wals_in_manifest;
 
     // Integrated BlobDB
     options.enable_blob_files = FLAGS_enable_blob_files;
@@ -4514,12 +4528,24 @@ class Benchmark {
           exit(1);
         }
       }
-      fprintf(stdout,
-              "Integrated BlobDB: blob cache enabled, block and blob caches "
-              "shared: %d, blob cache size %" PRIu64
-              ", blob cache num shard bits: %d\n",
-              FLAGS_use_shared_block_and_blob_cache, FLAGS_blob_cache_size,
-              FLAGS_blob_cache_numshardbits);
+      switch (FLAGS_prepopulate_blob_cache) {
+        case 0:
+          options.prepopulate_blob_cache = PrepopulateBlobCache::kDisable;
+          break;
+        case 1:
+          options.prepopulate_blob_cache = PrepopulateBlobCache::kFlushOnly;
+          break;
+        default:
+          fprintf(stderr, "Unknown prepopulate blob cache mode\n");
+          exit(1);
+      }
+      fprintf(
+          stdout,
+          "Integrated BlobDB: blob cache enabled, block and blob caches "
+          "shared: %d, blob cache size %" PRIu64
+          ", blob cache num shard bits: %d, hot/warm blobs prepopulated: %d\n",
+          FLAGS_use_shared_block_and_blob_cache, FLAGS_blob_cache_size,
+          FLAGS_blob_cache_numshardbits, FLAGS_prepopulate_blob_cache);
     } else {
       fprintf(stdout, "Integrated BlobDB: blob cache disabled\n");
     }
@@ -8384,6 +8410,7 @@ int db_bench_tool(int argc, char** argv) {
   if (!initialized) {
     SetUsageMessage(std::string("\nUSAGE:\n") + std::string(argv[0]) +
                     " [OPTIONS]...");
+    SetVersionString(GetRocksVersionAsString(true));
     initialized = true;
   }
   ParseCommandLineFlags(&argc, &argv, true);
@@ -8468,6 +8495,13 @@ int db_bench_tool(int argc, char** argv) {
   // Let -readonly imply -use_existing_db
   FLAGS_use_existing_db |= FLAGS_readonly;
 #endif  // ROCKSDB_LITE
+
+  if (FLAGS_build_info) {
+    std::string build_info;
+    std::cout << GetRocksBuildInfoAsString(build_info, true) << std::endl;
+    // Similar to --version, nothing else will be done when this flag is set
+    exit(0);
+  }
 
   if (!FLAGS_seed) {
     uint64_t now = FLAGS_env->GetSystemClock()->NowMicros();
