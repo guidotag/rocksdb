@@ -17,16 +17,18 @@ print_sep() {
     echo "${S// /$SEP}"
 }
 
-COMPILE=n
+COMPILE=y
 LOOKUP_BENCHMARKS=y
 INSERT_BENCHMARKS=n
 RUNS=1
 
-CACHE_SIZE_LIST=(1073741824) #(1073741824 8589934592 34359738368) # 1GB, 8GB, 32GB
-BLOCK_SIZE_LIST=(8192) #(8192 2097152) # 8kB, 2MB
 NUM_THREADS=64
 OPS_PER_THREAD=5000000 #10000000
-CACHE_TYPE_LIST=(clock_cache lru_cache fast_lru_cache) #(lru_cache fast_lru_cache clock_cache)
+
+CACHE_SIZE_LIST=(1073741824) #(1073741824 8589934592 34359738368) # 1GB, 8GB, 32GB
+BLOCK_SIZE_LIST=(8192) #(8192 2097152) # 8kB, 2MB
+CACHE_TYPE_LIST=(clock_cache) #(clock_cache lru_cache fast_lru_cache)
+NUM_SHARDS_LIST=(64)
 
 if [ "$COMPILE" == "y" ]
 then
@@ -45,7 +47,6 @@ do
         do
             for BLOCK_SIZE in ${BLOCK_SIZE_LIST[@]}
             do
-                NUM_SHARDS_LIST=(64)
                 for NUM_SHARDS in ${NUM_SHARDS_LIST[@]}
                 do
                     NUM_SHARDS_BITS=$(printf %.0f $(log2 $NUM_SHARDS))
@@ -117,3 +118,4 @@ do
         done
     done
 done
+
